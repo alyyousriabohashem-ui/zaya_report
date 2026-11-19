@@ -17,6 +17,7 @@ PW = os.environ.get('DASH_PASSWORD', '')
 if len(PW) < 8:
     sys.exit('DASH_PASSWORD secret مش موجود أو قصير (8 حروف على الأقل).')
 ONLY = os.environ['PROJECT'].strip() if 'PROJECT' in os.environ else DEFAULT_PROJECT
+ONLY_LIST = [p.strip() for p in ONLY.replace('،', ',').split(',') if p.strip()]  # مشروع أو أكتر، مفصولين بفاصلة: 131,Flow
 HERE = os.path.dirname(os.path.abspath(__file__))
 # --- اقرا الشيت الأول: دوّر على صف العناوين (اللي فيه "اسم المشروع") بدل ما نفترض مكانه ---
 def _find_sheet():
@@ -51,9 +52,9 @@ if missing:
 df = df.loc[:, ~df.columns.duplicated()]
 df = df[df['اسم المشروع'].notna()].copy()
 df['اسم المشروع'] = df['اسم المشروع'].astype(str).str.strip()
-if ONLY: df = df[df['اسم المشروع'] == ONLY].copy()
+if ONLY_LIST: df = df[df['اسم المشروع'].isin(ONLY_LIST)].copy()
 if df.empty:
-    sys.exit('مفيش صفوف للمشروع "%s". المشاريع الموجودة في الملف: %s' % (ONLY, sorted(set(pd.read_excel(XLSX, sheet_name=SHEET, header=hdr_row)['اسم المشروع'].dropna().astype(str).str.strip()))))
+    sys.exit('مفيش صفوف للمشروع "%s". المشاريع الموجودة في الملف: %s' % (ONLY_LIST, sorted(set(pd.read_excel(XLSX, sheet_name=SHEET, header=hdr_row)['اسم المشروع'].dropna().astype(str).str.strip()))))
 df['t'] = df['نوع الدفعة'].fillna('').astype(str).str.strip()
 stats = {}
 
