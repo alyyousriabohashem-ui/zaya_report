@@ -24,7 +24,7 @@ jobs:
       - name: Convert
         env:
           DASH_PASSWORD: ${{ secrets.DASH_PASSWORD }}
-          PROJECT: "دريم,131,Flow"
+          PROJECT: ""
         run: python -W ignore convert.py book.xlsx data.json
       - name: Commit if changed
         run: |
