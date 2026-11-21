@@ -52,7 +52,9 @@ if missing:
 df = df.loc[:, ~df.columns.duplicated()]
 df = df[df['اسم المشروع'].notna()].copy()
 df['اسم المشروع'] = df['اسم المشروع'].astype(str).str.strip()
-if ONLY_LIST: df = df[df['اسم المشروع'].isin(ONLY_LIST)].copy()
+def _wanted(p):
+    return any((p.startswith(x[:-1]) if x.endswith('*') else p == x) for x in ONLY_LIST)
+if ONLY_LIST: df = df[df['اسم المشروع'].map(_wanted)].copy()
 if df.empty:
     sys.exit('مفيش صفوف للمشروع "%s". المشاريع الموجودة في الملف: %s' % (ONLY_LIST, sorted(set(pd.read_excel(XLSX, sheet_name=SHEET, header=hdr_row)['اسم المشروع'].dropna().astype(str).str.strip()))))
 df['t'] = df['نوع الدفعة'].fillna('').astype(str).str.strip()
@@ -93,14 +95,30 @@ def norm_channel(v):
 def is_inst(t): return 'قسط' in t and 'صيانة' not in t and 'جراج' not in t
 def is_con(t): return t in ('تعاقد', 'مقدم', 'تعاقد + جراج')
 def cat_of(t):
-    """0 قسط | 1 تعاقد | 2 جراج | 3 أخرى | 4 صيانة"""
+    """0 قسط | 1 تعاقد | 2 جراج | 3 أخرى | 4 صيانة | 5 بنية تحتية"""
     if 'صيانة' in t: return 4
+    if 'تحتية' in t: return 5
     if is_con(t): return 1
     if is_inst(t): return 0
     if 'جراج' in t: return 2
     return 3
 
-projects = df['اسم المشروع'].value_counts().index.tolist()
+# تجميع المشاريع في مجموعات: كل "لاكاسيل ..." تحت لاكاسيل، وكل "دريم ..." تحت دريم، وكل "رودي ..." تحت رودي، وغيرهم لوحدهم
+def group_of(p):
+    for g in ('لاكاسيل', 'دريم', 'رودي'):
+        if p.startswith(g): return g
+    return p
+def _nat(p): return [int(x) if x.isdigit() else x for x in re.split(r'(\d+)', p)]
+_cnt = df['اسم المشروع'].value_counts()
+_gcnt = {}
+for _p, _n in _cnt.items(): _gcnt[group_of(_p)] = _gcnt.get(group_of(_p), 0) + _n
+_gorder = sorted(_gcnt, key=lambda g: -_gcnt[g])
+projects = []
+groups = []
+for _g in _gorder:
+    _mem = sorted([p for p in _cnt.index if group_of(p) == _g], key=lambda p: (p != _g, _nat(p)))
+    groups.append([_g, list(range(len(projects), len(projects) + len(_mem)))])
+    projects += _mem
 pidx = {p: i for i, p in enumerate(projects)}
 D = lambda x: x.strftime('%Y-%m-%d')
 r2 = lambda x: round(float(x), 2)
@@ -187,7 +205,7 @@ try:
     _now = datetime.now(ZoneInfo('Africa/Cairo'))
 except Exception:
     _now = datetime.now(timezone(timedelta(hours=2)))
-payload = dict(updated=updated, synced=_now.strftime('%Y-%m-%d %H:%M'), projects=projects, inst=inst, con=con, rem=rem, sales=sales, mi=mi, col=colall, gsales=gsales, remg=remg)
+payload = dict(updated=updated, synced=_now.strftime('%Y-%m-%d %H:%M'), projects=projects, groups=groups, inst=inst, con=con, rem=rem, sales=sales, mi=mi, col=colall, gsales=gsales, remg=remg)
 raw = gzip.compress(json.dumps(payload, ensure_ascii=False, separators=(',', ':')).encode('utf-8'), 9)
 salt, iv = os.urandom(16), os.urandom(12)
 key = PBKDF2HMAC(hashes.SHA256(), 32, salt, 200000).derive(PW.encode('utf-8'))
